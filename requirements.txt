@@ -1,6 +1,6 @@
 arrow
 jsonpath_rw
 kafka-python
-psycopg2
+psycopg2-binary
 pytest
 pytest-cov

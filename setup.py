@@ -21,7 +21,7 @@ setuptools.setup(
         'arrow',
         'jsonpath_rw',
         'kafka-python',
-        'psycopg2',
+        'psycopg2-binary',
     ],
     python_requires='>=3.6',
 )
