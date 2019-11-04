@@ -1,0 +1,6 @@
+arrow
+jsonpath_rw
+kafka-python
+psycopg2
+pytest
+pytest-cov
