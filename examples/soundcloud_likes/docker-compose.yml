@@ -1,0 +1,28 @@
+version: "3.1"
+
+services:
+
+  outputs_db:
+    build:
+      context: .
+      dockerfile: "Dockerfile-outputs_db"
+    restart: always
+    environment:
+      POSTGRES_USER: batchout
+      POSTGRES_PASSWORD: batchout
+      POSTGRES_DB: batchout
+    ports:
+      - "5432:5432"
+
+  batchout:
+    build:
+      context: .
+    depends_on:
+      - outputs_db
+    restart: always
+    environment:
+      OUTPUTS_USER: "batchout"
+      OUTPUTS_PASSWORD: "batchout"
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - .:/opt/batchout

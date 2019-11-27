@@ -16,3 +16,7 @@ class Input(object):
     @abc.abstractmethod
     def commit(self):
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def reset(self):
+        raise NotImplementedError

@@ -20,7 +20,10 @@ class DummyInput(Input):
             return
         payload = self._data[self._batch_size]
         self._batch_size += 1
-        return payload
+        return payload.encode('utf8')
 
     def commit(self):
         pass
+
+    def reset(self):
+        self._batch_size = 0

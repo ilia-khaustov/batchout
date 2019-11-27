@@ -7,7 +7,7 @@ import arrow
 from batchout.core.config import with_config_key
 from batchout.core.registry import Registry
 from batchout.columns import Column
-from batchout.extractors import Extractor, DEFAULT_EXTRACTOR
+from batchout.extractors import Extractor
 from batchout.processors import Processor
 
 
@@ -23,7 +23,6 @@ with_path = with_config_key('path', raise_exc=ColumnConfigInvalid)
 with_cast = with_config_key('cast', raise_exc=ColumnConfigInvalid,
                             casts=('string', 'integer', 'float', 'timestamp', 'date'))
 with_extractor = with_config_key('extractor', raise_exc=ColumnConfigInvalid,
-                                 default=DEFAULT_EXTRACTOR.bound_name,
                                  extractors=Registry.BOUND.get(Extractor, set()))
 with_processors = with_config_key('processors')
 

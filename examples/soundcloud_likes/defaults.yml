@@ -1,0 +1,12 @@
+# Default values for batchout config
+
+columns:
+  extractor: xpath
+  html: true
+  strategy: take_first
+  type: extracted
+
+indexes:
+  extractor: xpath
+  html: true
+  strategy: take_all

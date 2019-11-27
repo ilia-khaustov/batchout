@@ -1,4 +1,3 @@
-import json
 import logging
 
 import kafka
@@ -54,9 +53,8 @@ class KafkaInput(Input):
             return
         message = next(self.consumer, None)
         if message:
-            payload = message.value.decode('UTF-8')
             self._batch_size += 1
-            return payload
+            return message.value
         else:
             log.info(f'Fetch timeout on batch_size={self._batch_size}')
 
@@ -65,6 +63,11 @@ class KafkaInput(Input):
             return
         log.info(f'Input commits batch_size={self._batch_size}')
         self._consumer.commit()
+        self._consumer.close()
+        self._consumer = None
+        self._batch_size = 0
+
+    def reset(self):
         self._consumer.close()
         self._consumer = None
         self._batch_size = 0

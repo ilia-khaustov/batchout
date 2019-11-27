@@ -2,5 +2,7 @@ arrow
 jsonpath_rw
 kafka-python
 psycopg2-binary
+requests
+lxml
 pytest
 pytest-cov

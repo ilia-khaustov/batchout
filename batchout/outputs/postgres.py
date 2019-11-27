@@ -42,6 +42,7 @@ class PostgresOutput(Output):
         self.set_user(config)
         self.set_password(config)
         self.set_keys(config)
+        self.set_mode(config)
         if self._mode == 'upsert' and self._keys is None:
             raise PostgresOutputConfigInvalid('missing keys with mode=upsert')
         self._connection, self._cursor = None, None
@@ -68,16 +69,14 @@ class PostgresOutput(Output):
             self._cursor.close()
         self._cursor = None
         if self._connection and not self._connection.closed:
-            if commit:
-                self._connection.commit()
-            else:
-                self._connection.cancel()
             self._connection.close()
         self._connection = None
 
     def ingest(self, data):
+        if len(data) < 1:
+            return
 
-        cols, batch_values = list(map(str, data.columns)), chain.from_iterable(data.rows)
+        cols, batch_values = list(map(str, data.columns)), list(chain.from_iterable(data.rows))
 
         fix = uuid.uuid1().hex
         batch_tbl = f'batch_{fix}'
@@ -123,7 +122,7 @@ class PostgresOutput(Output):
         )
 
         try:
-            self.cursor.execute('begin')
+            log.info(f'Starting transaction with {len(data)} rows')
             self.cursor.execute(__create_batch, batch_values)
             if self._mode == self.mode_upsert:
                 self.cursor.execute(__create_cdiff)

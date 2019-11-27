@@ -1,1 +1,1 @@
-from batchout.core.batch import Batch
+from batchout.core import Batch

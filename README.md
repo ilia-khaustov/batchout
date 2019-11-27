@@ -14,7 +14,7 @@ Framework for building data pipelines that:
 
 It is better explained by example.
 
-Let's say we encounter a stream of JSON messages coming from Kafka topic `auth.sessions`:
+Let's say we periodically fetch a JSON message from some REST API:
 
 ```json
 {
@@ -41,7 +41,7 @@ Let's say we encounter a stream of JSON messages coming from Kafka topic `auth.s
 }
 ```
 
-Stream data has to be put into database table `user_session` like this:
+Fetched data has to be put into database table `user_session` like this:
 
 ```
 user_id       user_last_seen        session_id      session_created_at    session_useragent
@@ -52,66 +52,72 @@ someuserid    2019-11-01T00:00:00   othersessionid  2019-11-01T00:00:00   firefo
 
 With Batchout, you don't need to write boilerplate code.
 
-Just use `batchout.core.Batch` for configuring and running your pipeline.
+Just use `batchout.Batch` for configuring and running your pipeline.
 
 ```python
-from batchout.core import Batch
+from batchout import Batch
 
 
 batch = Batch.from_config(
-    inputs=dict(
-        kafka=dict(
-            type='kafka',
-            bootstrap_servers=['kafka:9092'],
-            consumer_group='batchout',
-            topic='auth.sessions',
-        ),
-    ),
-    indexes=dict(
-        session_idx=dict(
-            type='for_list',
-            path='sessions',
-        )
-    ),
-    columns=dict(
-        user_id=dict(
-            type='extracted',
-            cast='string',
-            path='user.id',
-        ),
-        user_last_seen=dict(
-            type='extracted',
-            cast='string',
-            path='user.last_seen',
-        ),
-        session_id=dict(
-            type='extracted',
-            cast='string',
-            path='sessions[{session_idx}].id',  # notice usage of session_idx defined as index above
-        ),
-        session_created_at=dict(
-            type='extracted',
-            cast='timestamp',
-            path='sessions[{session_idx}].created_at',
-        ),
-        session_useragent=dict(
-            type='extracted',
-            cast='timestamp',
-            path='sessions[{session_idx}].device.useragent',
-        ),
-    ),
-    outputs=dict(
-        local=dict(
-            type='postgres',
-            mode='upsert',
-            keys=['user_id', 'session_id'],
-            host='localhost',
-            port=5432,
-            dbname='user_session',
-            from_env=dict(
-                user='PG_USER',          # PG_USER and
-                password='PG_PASSWORD',  # PG_PASSWORD are read from environment
+    dict(
+        inputs=dict(
+            some_api=dict(
+                type='http',
+                method='get',
+                uri='https://some.api/my/user/sessions',
             ),
+        ),
+        indexes=dict(
+            session_idx=dict(
+                type='for_list',
+                path='sessions',
+            )
+        ),
+        columns=dict(
+            user_id=dict(
+                cast='string',
+                path='user.id',
+            ),
+            user_last_seen=dict(
+                cast='string',
+                path='user.last_seen',
+            ),
+            session_id=dict(
+                cast='string',
+                path='sessions[{session_idx}].id',  # notice usage of session_idx defined as index above
+            ),
+            session_created_at=dict(
+                cast='timestamp',
+                path='sessions[{session_idx}].created_at',
+            ),
+            session_useragent=dict(
+                cast='timestamp',
+                path='sessions[{session_idx}].device.useragent',
+            ),
+        ),
+        outputs=dict(
+            local=dict(
+                type='postgres',
+                mode='upsert',
+                keys=['user_id', 'session_id'],
+                host='localhost',
+                port=5432,
+                dbname='somedb',
+                table='user_session',
+                from_env=dict(
+                    user='DB_USER',          # DB_USER and
+                    password='DB_PASSWORD',  # DB_PASSWORD are read from environment
+                ),
+            ),
+        ),
+    ),
+    defaults=dict(
+        columns=dict(
+            type='extracted',
+            extractor='jsonpath',
+        ),
+        indexes=dict(
+            extractor='jsonpath',
         ),
     ),
 )
@@ -126,11 +132,19 @@ batch.run_once()
 
 ### Extractors
 
-#### jsonpath_rw
+#### jsonpath
 
 JSON parser built on top of jsonpath_rw.
 
+#### xpath
+
+XML/HTML parser built on top of lxml.
+
 ### Inputs
+
+#### http
+
+Request your data via HTTP API using this wrapper for requests.
 
 #### kafka
 

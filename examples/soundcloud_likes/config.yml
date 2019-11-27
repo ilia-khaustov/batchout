@@ -1,0 +1,41 @@
+# Batchout config for scraping SoundCloud likes
+
+inputs:
+  juche_likes:
+    type: http
+    uri: 'https://soundcloud.com/erejuche/likes'
+  lasoul_likes:
+    type: http
+    uri: 'https://soundcloud.com/lasoulofficial/likes'
+  sibewest_likes:
+    type: http
+    uri: 'https://soundcloud.com/sibewest/likes'
+
+indexes:
+  sound_idx:
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article'
+    type: for_list
+
+columns:
+  artist:
+    cast: string
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/h2/a[2]/text()'
+  title:
+    cast: string
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/h2/a[1]/text()'
+  uploaded_at:
+    cast: timestamp
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/time/text()'
+
+outputs:
+  postgres_in_docker:
+    type: postgres
+    host: outputs_db
+    port: 5432
+    dbname: batchout
+    from_env:
+      user: OUTPUTS_USER
+      password: OUTPUTS_PASSWORD
+    keys: [artist, title]
+    mode: upsert
+    table: soundcloud_likes
