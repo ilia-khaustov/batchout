@@ -1,4 +1,5 @@
 import logging
+import time
 
 import requests
 
@@ -19,6 +20,7 @@ class HttpInputConfigInvalid(Exception):
                  http_verbs=['get', 'post', 'put', 'delete', 'head'])
 @with_config_key('headers')
 @with_config_key('timeout_sec', default=60)
+@with_config_key('params')
 @Registry.bind(Input, 'http')
 class HttpInput(Input):
 
@@ -31,17 +33,36 @@ class HttpInput(Input):
         self.set_headers(config)
         if self._headers and not isinstance(self._headers, dict):
             raise HttpInputConfigInvalid('mapping expected for headers')
+        self.set_params(config)
+        if self._params and not isinstance(self._params, dict):
+            raise HttpInputConfigInvalid('mapping expected for params')
         self._response = None
 
-    def fetch(self):
+    def fetch(self, **params):
         if self._response:
             return
-        self._response = requests.request(
-            self._method,
-            self._uri,
-            headers=dict(self._headers) if self._headers else None,
-            timeout=float(self._timeout_sec)
-        )
+        if self._params:
+            params = {
+                p: params.get(p, d)
+                for p, d in self._params.items()
+                if not (p in params and params[p] is None)
+            }
+            if len(params) < len(self._params):
+                return
+        else:
+            params = {}
+        retries = 0
+        while self._response is None:
+            self._response = requests.request(
+                self._method,
+                self._uri.format(**params),
+                headers=dict(self._headers) if self._headers else None,
+                timeout=float(self._timeout_sec)
+            )
+            if 400 <= self._response.status_code < 600 and retries < 3:
+                self._response = None
+                retries += 1
+                time.sleep(retries)
         self._response.raise_for_status()
         return self._response.content
 

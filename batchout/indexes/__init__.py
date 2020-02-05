@@ -1,2 +1,2 @@
 from batchout.indexes.base import Index
-from batchout.indexes.extracted import IndexForList, IndexForObject, IndexFromList
+from batchout.indexes.scalar import IndexForList, IndexForObject, IndexFromList

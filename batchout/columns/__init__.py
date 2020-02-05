@@ -1,2 +1,2 @@
 from batchout.columns.base import Column
-from batchout.columns.extracted import ExtractedColumn
+from batchout.columns.scalar import StringColumn, IntegerColumn, FloatColumn, DateColumn, TimestampColumn

@@ -3,19 +3,19 @@ from batchout.core.registry import Registry
 from batchout.inputs import Input
 
 
-class DummyInputConfigInvalid(Exception):
+class ConstInputConfigInvalid(Exception):
     pass
 
 
-@with_config_key('data', raise_exc=DummyInputConfigInvalid)
-@Registry.bind(Input, 'dummy')
-class DummyInput(Input):
+@with_config_key('data', raise_exc=ConstInputConfigInvalid)
+@Registry.bind(Input, 'const')
+class ConstInput(Input):
 
     def __init__(self, config):
         self.set_data(config)
         self._batch_size = 0
 
-    def fetch(self):
+    def fetch(self, **_):
         if self._batch_size >= len(self._data):
             return
         payload = self._data[self._batch_size]

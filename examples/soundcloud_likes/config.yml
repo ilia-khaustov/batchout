@@ -1,41 +1,181 @@
 # Batchout config for scraping SoundCloud likes
+defaults:
+  columns:
+    extractor: first_match_in_html
+  indexes:
+    extractor: all_matches_in_html
 
 inputs:
-  juche_likes:
-    type: http
-    uri: 'https://soundcloud.com/erejuche/likes'
-  lasoul_likes:
-    type: http
-    uri: 'https://soundcloud.com/lasoulofficial/likes'
-  sibewest_likes:
-    type: http
-    uri: 'https://soundcloud.com/sibewest/likes'
-
-indexes:
-  sound_idx:
-    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article'
-    type: for_list
-
-columns:
-  artist:
-    cast: string
-    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/h2/a[2]/text()'
-  title:
-    cast: string
-    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/h2/a[1]/text()'
-  uploaded_at:
-    cast: timestamp
-    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/time/text()'
-
-outputs:
-  postgres_in_docker:
+  known_users:
     type: postgres
-    host: outputs_db
-    port: 5432
+    host: localhost
+    port: 5433
     dbname: batchout
     from_env:
       user: OUTPUTS_USER
       password: OUTPUTS_PASSWORD
-    keys: [artist, title]
+    limit: 10000
+    sql: >
+      select
+        liked_by as user,
+        max(id) as last_like_id
+      from soundcloud_likes
+      group by liked_by
+      order by 2
+  user_followees:
+    type: http
+    params:
+      user: 'musicproxy'
+    uri: 'https://soundcloud.com/{user}/following'
+  user_likes:
+    type: http
+    params:
+      user: 'musicproxy'
+    uri: 'https://soundcloud.com/{user}/likes'
+
+extractors:
+  all_matches_in_html:
+    type: xpath
+    html: true
+    strategy: take_all
+  first_match_in_html:
+    type: xpath
+    html: true
+    strategy: take_first
+  first_match_in_json:
+    type: jsonpath
+    strategy: take_first
+
+indexes:
+  sound_idx:
+    type: for_list
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article'
+  followee_idx:
+    type: for_list
+    path: '//h2[contains(., "Users who are followed by")]/following-sibling::article'
+
+columns:
+  known_user:
+    type: string
+    path: '$.user'
+    extractor: first_match_in_json
+  last_like_id:
+    type: string
+    path: '$.last_like_id'
+    extractor: first_match_in_json
+  sc_user:
+    type: string
+    path: '//header/h1/a/@href'
+    processors:
+      - type: replace
+        old: '/'
+        new: ''
+        count: 1
+  sound_artist:
+    type: string
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/h2/a[2]/text()'
+  sound_title:
+    type: string
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/h2/a[1]/text()'
+  sound_uploaded_at:
+    type: timestamp
+    path: '//h2[contains(., "Tracks and playlists liked")]/following-sibling::article[{sound_idx}]/time/text()'
+  followee_title:
+    type: string
+    path: '//h2[contains(., "Users who are followed by")]/following-sibling::article[{followee_idx}]/h2/a/text()'
+  followee_user:
+    type: string
+    path: '//h2[contains(., "Users who are followed by")]/following-sibling::article[{followee_idx}]/h2/a/@href'
+    processors:
+      - type: replace
+        old: '/'
+        new: ''
+        count: 1
+
+outputs:
+  postgres_in_docker:
+    type: postgres
+    host: localhost
+    port: 5433
+    dbname: batchout
+    from_env:
+      user: OUTPUTS_USER
+      password: OUTPUTS_PASSWORD
+    keys: [artist, title, liked_by]
     mode: upsert
     table: soundcloud_likes
+
+selectors:
+  # all users we already know about ordered by number of likes collected from min to max
+  users:
+    type: sql
+    columns: ['user']
+    query: >
+      select known.known_user
+      from known_users known
+      left join user_likes likes on likes.sc_user = known.known_user
+      group by known.known_user
+      order by max(known.last_like_id) desc, count(1) asc
+      limit 100
+  # only recently discovered followees we never heard of
+  unknown_followees:
+    type: sql
+    columns: ['user']
+    query: >
+      select distinct followees.followee_user
+      from user_followees followees
+      left join known_users known on known.known_user = followees.followee_user
+      where known.known_user is null
+  # all likes we collected
+  sounds:
+    type: sql
+    query: >
+      select sound_artist, sound_title, sound_uploaded_at, sc_user from user_likes
+    columns:
+      - artist
+      - title
+      - uploaded_at
+      - liked_by
+
+tasks:
+  # walkers
+  walk_sounds:
+    type: walker
+    inputs: [user_likes]
+    indexes: [sound_idx]
+    columns:
+      - sc_user
+      - sound_artist
+      - sound_title
+      - sound_uploaded_at
+  walk_followees:
+    type: walker
+    inputs: [user_followees]
+    indexes: [followee_idx]
+    columns:
+      - sc_user
+      - followee_title
+      - followee_user
+  walk_known_users:
+    type: walker
+    inputs: [known_users]
+    columns:
+      - known_user
+      - last_like_id
+  # readers
+  read_known_users:
+    type: reader
+    inputs: [known_users]
+  read_user_followees_and_likes:
+    type: reader
+    selector: users
+    inputs: [user_followees, user_likes]
+  read_unknown_followee_likes:
+    type: reader
+    selector: unknown_followees
+    inputs: [user_likes]
+  # writers
+  write_sounds:
+    type: writer
+    selector: sounds
+    outputs: [postgres_in_docker]

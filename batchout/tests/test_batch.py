@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 
 import pytest
@@ -8,14 +9,25 @@ from batchout.core.registry import Registry
 from batchout.outputs import Output
 
 
+@pytest.fixture(scope='session', autouse=True)
+def configure_logging():
+    logging.getLogger().setLevel(logging.ERROR)
+    logging.getLogger().addHandler(logging.StreamHandler())
+    logging.getLogger().handlers[-1].setFormatter(
+        logging.Formatter('\n%(asctime)s %(levelname)-5s %(name)-30s %(message)s')
+    )
+
+
 @Registry.bind(Output, 'recorder')
 class OutputRecorder(Output):
 
     def __init__(self, _):
-        self.data = None
+        self.cols = None
+        self.rows = None
 
-    def ingest(self, data):
-        self.data = data
+    def ingest(self, cols, rows):
+        self.cols = cols
+        self.rows = list(map(tuple, rows))
 
     def commit(self):
         pass
@@ -55,8 +67,8 @@ def json_orders():
 def test_run_for_json(json_orders):
     b = Batch.from_config(dict(
         inputs=dict(
-            dummy=dict(
-                type='dummy',
+            json_orders=dict(
+                type='const',
                 data=list(json_orders(3))
             ),
         ),
@@ -70,40 +82,45 @@ def test_run_for_json(json_orders):
                 path='model'
             ),
         ),
+        extractors=dict(
+            first_match_in_json=dict(
+                type='jsonpath',
+            ),
+        ),
         columns=dict(
             customer_id=dict(
-                cast='integer',
+                type='integer',
                 path='customer.id'
             ),
             order_id=dict(
-                cast='integer',
+                type='integer',
                 path='order.id'
             ),
             cart_product_id=dict(
-                cast='string',
+                type='string',
                 path='cart[{cart_idx}].id'
             ),
             cart_product_price=dict(
-                cast='float',
+                type='float',
                 path='cart[{cart_idx}].price'
             ),
             cart_product_name=dict(
-                cast='string',
+                type='string',
                 path='cart[{cart_idx}].name',
                 processors=[
                     dict(type='replace', old=' ', new='')
                 ]
             ),
             model_product_id=dict(
-                cast='string',
+                type='string',
                 path='model[{model_idx}].id'
             ),
             model_product_price=dict(
-                cast='float',
+                type='float',
                 path='model[{model_idx}].price'
             ),
             model_product_name=dict(
-                cast='string',
+                type='string',
                 path='model[{model_idx}].name',
                 processors=[
                     dict(type='replace', old=' ', new='')
@@ -114,24 +131,63 @@ def test_run_for_json(json_orders):
             recorder=dict(
                 type='recorder'
             ),
-            dummy=dict(
-                type='dummy'
+            logger=dict(
+                type='logger'
             ),
         ),
+        selectors=dict(
+            all=dict(
+                type='sql',
+                query='select * from json_orders',
+                columns=[
+                    'customer_id',
+                    'order_id',
+                    'cart_product_id',
+                    'cart_product_price',
+                    'cart_product_name',
+                    'model_product_id',
+                    'model_product_price',
+                    'model_product_name',
+                ],
+            ),
+        ),
+        tasks=dict(
+            walk_carts_and_models=dict(
+                type='walker',
+                indexes=['model_idx', 'cart_idx'],
+                inputs=['json_orders'],
+                columns=[
+                    'customer_id',
+                    'order_id',
+                    'cart_product_id',
+                    'cart_product_price',
+                    'cart_product_name',
+                    'model_product_id',
+                    'model_product_price',
+                    'model_product_name',
+                ],
+            ),
+            read_orders=dict(
+                type='reader',
+                inputs=['json_orders'],
+            ),
+            record_and_log=dict(
+                type='writer',
+                selector='all',
+                outputs=['recorder', 'logger'],
+            ),
+        )
     ), defaults={
         'columns': {
-            'type': 'extracted',
-            'extractor': 'jsonpath',
-            'strategy': 'take_first',
+            'extractor': 'first_match_in_json',
         },
         'indexes': {
-            'extractor': 'jsonpath',
-            'strategy': 'take_first',
+            'extractor': 'first_match_in_json',
         }
     })
     b.run_once()
-    recorded = b._outputs['recorder'].data
-    assert list(recorded.columns) == [
+    recorded_cols, recorded_rows = b._outputs['recorder'].cols, b._outputs['recorder'].rows
+    assert list(recorded_cols) == [
         'customer_id',
         'order_id',
         'cart_product_id',
@@ -141,7 +197,7 @@ def test_run_for_json(json_orders):
         'model_product_price',
         'model_product_name',
     ]
-    assert list(recorded.rows) == [
+    assert set(recorded_rows) == {
         (0, 1, 'cart1', 10., 'foobar', 'model1', 100., 'barfoo'),
 
         (1, 2, 'cart2', 20., 'foobar', 'model2', 200., 'barfoo'),
@@ -158,15 +214,15 @@ def test_run_for_json(json_orders):
         (2, 3, 'cart5', 50., 'foobar', 'model3', 300., 'barfoo'),
         (2, 3, 'cart5', 50., 'foobar', 'model4', 400., 'barfoo'),
         (2, 3, 'cart5', 50., 'foobar', 'model5', 500., 'barfoo'),
-    ]
+    }
 
 
 @pytest.fixture
 def xml_orders():
 
     def foobar(foo, bar):
-        def ooba(n): return " " * random.randint(0, n)
-        return ooba(5) + foo + ooba(5) + bar + ooba(5)
+        def oo(n): return " " * random.randint(0, n)
+        return oo(5) + foo + oo(5) + bar + oo(5)
 
     def g(n):
         for i in range(n):
@@ -192,9 +248,18 @@ def xml_orders():
 def test_run_for_xml(xml_orders):
     b = Batch.from_config(dict(
         inputs=dict(
-            dummy=dict(
-                type='dummy',
+            xml_orders=dict(
+                type='const',
                 data=list(xml_orders(3))
+            ),
+        ),
+        extractors=dict(
+            first_match_in_xml=dict(
+                type='xpath',
+            ),
+            all_matches_in_xml=dict(
+                type='xpath',
+                strategy='take_all',
             ),
         ),
         indexes=dict(
@@ -209,38 +274,38 @@ def test_run_for_xml(xml_orders):
         ),
         columns=dict(
             customer_id=dict(
-                cast='integer',
+                type='integer',
                 path='/order/customer/@id'
             ),
             order_id=dict(
-                cast='integer',
+                type='integer',
                 path='/order/@id'
             ),
             cart_product_id=dict(
-                cast='string',
+                type='string',
                 path='/order/cart/product[{cart_idx}]/@id'
             ),
             cart_product_price=dict(
-                cast='float',
+                type='float',
                 path='/order/cart/product[{cart_idx}]/price/text()'
             ),
             cart_product_name=dict(
-                cast='string',
+                type='string',
                 path='/order/cart/product[{cart_idx}]/name/text()',
                 processors=[
                     dict(type='replace', old=' ', new='')
                 ]
             ),
             model_product_id=dict(
-                cast='string',
+                type='string',
                 path='/order/model/product[{model_idx}]/@id'
             ),
             model_product_price=dict(
-                cast='float',
+                type='float',
                 path='/order/model/product[{model_idx}]/price/text()',
             ),
             model_product_name=dict(
-                cast='string',
+                type='string',
                 path='/order/model/product[{model_idx}]/name/text()',
                 processors=[
                     dict(type='replace', old=' ', new='')
@@ -251,24 +316,63 @@ def test_run_for_xml(xml_orders):
             recorder=dict(
                 type='recorder'
             ),
-            dummy=dict(
-                type='dummy'
+            logger=dict(
+                type='logger'
             ),
         ),
+        selectors=dict(
+            all=dict(
+                type='sql',
+                query='select * from xml_orders',
+                columns=[
+                    'customer_id',
+                    'order_id',
+                    'cart_product_id',
+                    'cart_product_price',
+                    'cart_product_name',
+                    'model_product_id',
+                    'model_product_price',
+                    'model_product_name',
+                ],
+            )
+        ),
+        tasks=dict(
+            walk_carts_and_models=dict(
+                type='walker',
+                indexes=['model_idx', 'cart_idx'],
+                inputs=['xml_orders'],
+                columns=[
+                    'customer_id',
+                    'order_id',
+                    'cart_product_id',
+                    'cart_product_price',
+                    'cart_product_name',
+                    'model_product_id',
+                    'model_product_price',
+                    'model_product_name',
+                ],
+            ),
+            read_orders=dict(
+                type='reader',
+                inputs=['xml_orders'],
+            ),
+            record_and_log=dict(
+                type='writer',
+                selector='all',
+                outputs=['recorder', 'logger'],
+            ),
+        )
     ), defaults={
         'columns': {
-            'type': 'extracted',
-            'extractor': 'xpath',
-            'strategy': 'take_first',
+            'extractor': 'first_match_in_xml',
         },
         'indexes': {
-            'extractor': 'xpath',
-            'strategy': 'take_all',
+            'extractor': 'all_matches_in_xml',
         }
     })
     b.run_once()
-    recorded = b._outputs['recorder'].data
-    assert list(recorded.columns) == [
+    recorded_cols, recorded_rows = b._outputs['recorder'].cols, b._outputs['recorder'].rows
+    assert list(recorded_cols) == [
         'customer_id',
         'order_id',
         'cart_product_id',
@@ -278,7 +382,7 @@ def test_run_for_xml(xml_orders):
         'model_product_price',
         'model_product_name',
     ]
-    assert list(recorded.rows) == [
+    assert set(recorded_rows) == {
         (0, 1, 'cart1', 10., 'foobar', 'model1', 100., 'barfoo'),
 
         (1, 2, 'cart2', 20., 'foobar', 'model2', 200., 'barfoo'),
@@ -295,4 +399,4 @@ def test_run_for_xml(xml_orders):
         (2, 3, 'cart5', 50., 'foobar', 'model3', 300., 'barfoo'),
         (2, 3, 'cart5', 50., 'foobar', 'model4', 400., 'barfoo'),
         (2, 3, 'cart5', 50., 'foobar', 'model5', 500., 'barfoo'),
-    ]
+    }

@@ -1,4 +1,11 @@
+from functools import partial
+from itertools import accumulate
+
+import arrow
+
 from batchout.core.config import with_config_key
+from batchout.core.registry import Registry
+from batchout.processors import Processor
 
 
 class UnknownStrategy(Exception):
@@ -6,6 +13,10 @@ class UnknownStrategy(Exception):
 
 
 class StrategyNotSet(Exception):
+    pass
+
+
+class InvalidTimezone(Exception):
     pass
 
 
@@ -44,3 +55,39 @@ class WithStrategy(object):
         else:
             raise UnknownStrategy(self._strategy)
         return p, v
+
+
+with_timezone = with_config_key(
+    'timezone',
+    default='UTC',
+)
+
+
+@with_timezone
+class WithTimezone(object):
+
+    def _validate_timezone(self):
+        if self._timezone is None:
+            return
+        try:
+            arrow.now(self._timezone)
+        except arrow.ParserError:
+            raise InvalidTimezone(f'{self._timezone} is not a valid timezone')
+
+
+with_processors = with_config_key(
+    'processors',
+)
+
+
+@with_processors
+class WithProcessors(object):
+
+    def _init_processors(self):
+        if self._processors is not None:
+            self._processors = list(map(partial(Registry.create, Processor), self._processors))
+        else:
+            self._processors = []
+
+    def _process(self, value):
+        return tuple(accumulate([value] + self._processors, lambda v, p: p.process(v)))[-1]

@@ -4,7 +4,7 @@ import abc
 class Input(object):
 
     @abc.abstractmethod
-    def fetch(self):
+    def fetch(self, **params):
         raise NotImplementedError
 
     def __iter__(self):

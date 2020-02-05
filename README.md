@@ -67,6 +67,11 @@ batch = Batch.from_config(
                 uri='https://some.api/my/user/sessions',
             ),
         ),
+        extractors=dict(
+            first_match_in_json=dict(
+                type='jsonpath',
+            ),
+        ),
         indexes=dict(
             session_idx=dict(
                 type='for_list',
@@ -75,28 +80,41 @@ batch = Batch.from_config(
         ),
         columns=dict(
             user_id=dict(
-                cast='string',
+                type='string',
                 path='user.id',
             ),
             user_last_seen=dict(
-                cast='string',
+                type='string',
                 path='user.last_seen',
             ),
             session_id=dict(
-                cast='string',
+                type='string',
                 path='sessions[{session_idx}].id',  # notice usage of session_idx defined as index above
             ),
             session_created_at=dict(
-                cast='timestamp',
+                type='timestamp',
                 path='sessions[{session_idx}].created_at',
             ),
             session_useragent=dict(
-                cast='timestamp',
+                type='timestamp',
                 path='sessions[{session_idx}].device.useragent',
             ),
         ),
+        selectors=dict(
+            all_sessions=dict(
+                type='sql',
+                query='select * from some_api',
+                columns=[
+                    'user_id',
+                    'user_last_seen',
+                    'session_id',
+                    'session_created_at',
+                    'session_useragent',
+                ]
+            )
+        ),
         outputs=dict(
-            local=dict(
+            local_db=dict(
                 type='postgres',
                 mode='upsert',
                 keys=['user_id', 'session_id'],
@@ -110,14 +128,36 @@ batch = Batch.from_config(
                 ),
             ),
         ),
+        tasks=dict(
+            read_sessions=dict(
+                type='reader',
+                inputs=['some_api'],
+            ),
+            walk_sessions=dict(
+                type='walker',
+                inputs=['some_api'],
+                indexes=['session_idx'],
+                columns=[
+                    'user_id',
+                    'user_last_seen',
+                    'session_id',
+                    'session_created_at',
+                    'session_useragent',
+                ],
+            ),
+            write_sessions_to_local_db=dict(
+                type='writer',
+                selector='all_sessions',
+                outputs=['local_db']
+            )
+        )
     ),
     defaults=dict(
         columns=dict(
-            type='extracted',
-            extractor='jsonpath',
+            extractor='first_match_in_json',
         ),
         indexes=dict(
-            extractor='jsonpath',
+            extractor='first_match_in_json',
         ),
     ),
 )
@@ -127,31 +167,3 @@ batch.run_once()
 `Batch.run_once()` processes exactly one batch of payloads from each input.
 
 `Batch.run_forever()` does the same in infinite loop.
-
-## Integrations
-
-### Extractors
-
-#### jsonpath
-
-JSON parser built on top of jsonpath_rw.
-
-#### xpath
-
-XML/HTML parser built on top of lxml.
-
-### Inputs
-
-#### http
-
-Request your data via HTTP API using this wrapper for requests.
-
-#### kafka
-
-Simple consumer built on top of kafka-python.
-
-### Outputs
-
-#### postgres
-
-Postgres table writer built on top of psycopg2.

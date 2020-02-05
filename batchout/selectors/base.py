@@ -1,13 +1,15 @@
 import abc
 from typing import Any, Generator, List
 
+from batchout.core.data import Data
 
-class Output(object):
+
+class Selector(object):
 
     @abc.abstractmethod
-    def ingest(self, columns: List[str], rows: Generator[List[Any], None, None]) -> int:
+    def columns(self) -> List[Any]:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def commit(self):
+    def apply(self, data: Data) -> Generator[List[Any], None, None]:
         raise NotImplementedError
