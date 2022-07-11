@@ -1,7 +1,0 @@
-arrow
-jsonpath_rw
-psycopg2-binary
-requests
-lxml
-pytest
-pytest-cov

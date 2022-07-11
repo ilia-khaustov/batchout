@@ -1,6 +1,9 @@
-from typing import ClassVar, Dict, Any
+from typing import Type, Mapping, Any, TypeVar
 
-from batchout.core.config import ConfigInvalid, update_from_env
+from .config import ConfigInvalid, update_from_env
+
+
+T = TypeVar('T')
 
 
 class ClassInvalid(Exception):
@@ -16,8 +19,8 @@ class Registry(object):
     BOUND = {}
 
     @staticmethod
-    def bind(cls: ClassVar, name: str):
-        def do_bind(subcls):
+    def bind(cls: Type, name: str):
+        def do_bind(subcls: T) -> T:
             if not issubclass(subcls, cls):
                 raise ClassInvalid(f'{subcls.__name__} is not a subclass of {cls.__name__}')
             if name in Registry.BOUND[cls]:
@@ -30,7 +33,7 @@ class Registry(object):
         return do_bind
 
     @staticmethod
-    def create(cls: ClassVar, config: Dict[str, Any]):
+    def create(cls: Type, config: Mapping[str, Any]):
         if 'type' not in config:
             raise ConfigInvalid(f'type of {cls.__name__} is not specified')
         Registry.BOUND.setdefault(cls, {})

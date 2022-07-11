@@ -1,0 +1,40 @@
+# {{ component_cls.__name__ }}
+
+Source: [{{ component_cls.__module__ }}](../../{{ component_cls.__module__|replace(".", "/") }}.py)
+
+## Use
+
+In Python:
+
+```python
+from {{ component_cls.__module__ }} import {{ component_cls.__name__ }}
+```
+
+In YAML config:
+
+```YAML
+{{ component_cls.PLURAL_ALIAS }}:
+    type: {{ component_type }}
+```
+
+## Configuration
+{% for key, props in spec_by_type[component_type] %}
+
+### {{ key }}
+{% if props.required %}
+_Required_
+{% endif -%}
+
+{%- if props.default %}
+_Default_: `{{ props.default }}`
+{% endif -%}
+
+{%- if props.choices %}
+_Choices_: One of `{{ props.choices|join('`, `') }}`
+{% endif -%}
+
+{%- if props.doc %}
+{{ props.doc }}.
+{% endif -%}
+
+{% endfor -%}

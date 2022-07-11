@@ -1,22 +1,25 @@
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
+import os.path
 
-import arrow
 import yaml
 
 from batchout import Batch
 
 
+main_dir = os.path.dirname(__file__)
+
+
 def main():
-    config = yaml.load(open('examples/soundcloud_likes/config.yml'), yaml.Loader)
+    config = yaml.load(open(os.path.join(main_dir, 'batch.yml')), yaml.Loader)
     defaults = config.pop('defaults') if 'defaults' in config else {}
     same_minute_fails = 0
     while same_minute_fails < 3:
-        started_at = arrow.get()
+        started_at = datetime.now()
         try:
-            Batch.from_config(config, defaults).run_forever(min_wait_sec=5, max_wait_sec=10)
+            Batch.from_config(config, defaults).run_forever()
         except Exception as exc:
-            if arrow.get() < (started_at + timedelta(minutes=1)):
+            if datetime.now() < (started_at + timedelta(minutes=1)):
                 same_minute_fails += 1
             else:
                 same_minute_fails = 0

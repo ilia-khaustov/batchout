@@ -1,0 +1,169 @@
+defaults:
+  columns:
+    extractor: first_match_in_json
+  indexes:
+    extractor: first_match_in_json
+
+inputs:
+  departments:
+    type: const
+    data:
+      - >
+        [
+          {
+            "department": "sales",
+            "employees": [
+              {
+                "email": "john.doe@email",
+                "phone": "1234567890"
+              },
+              {
+                "email": "don.joe@email",
+                "phone": "0987654321"
+              }
+            ],
+            "devices": [
+                {
+                  "type": "Phone",
+                  "serial": "phone123"
+                },
+                {
+                  "type": "Phone",
+                  "serial": "phone321"
+                }
+            ]
+          },
+          {
+            "department": "finance",
+            "employees": [
+              {
+                "email": "ann.mary.jane@email",
+                "phone": "1234567890"
+              },
+              {
+                "email": "mary.jane.ann@email",
+                "phone": "2345678901"
+              },
+              {
+                "email": "jane.ann.mary@email",
+                "phone": "3456789012"
+              }
+            ],
+            "devices": [
+                {
+                  "type": "Calculator",
+                  "serial": "calc9000"
+                },
+                {
+                  "type": "Printer",
+                  "serial": "p0001"
+                }
+            ]
+          }
+        ]
+
+extractors:
+  first_match_in_json:
+    type: jsonpath
+    strategy: take_first
+
+indexes:
+  dept_idx:
+    type: for_list
+    path: '$'
+  empl_idx:
+    type: for_list
+    path: '$[{dept_idx}].employees'
+  device_idx:
+    type: for_list
+    path: '$[{dept_idx}].devices'
+
+columns:
+  dept:
+    type: string
+    path: '$[{dept_idx}].department'
+  employee_email:
+    type: string
+    path: '$[{dept_idx}].employees[{empl_idx}].email'
+  employee_phone:
+    type: string
+    path: '$[{dept_idx}].employees[{empl_idx}].phone'
+  device_type:
+    type: string
+    path: '$[{dept_idx}].devices[{device_idx}].type'
+  device_serial:
+    type: string
+    path: '$[{dept_idx}].devices[{device_idx}].serial'
+
+maps:
+  departments:
+    - dept_idx:
+        - dept
+        - empl_idx:
+            - employee_email
+            - employee_phone
+          device_idx:
+            - device_type
+            - device_serial
+
+selectors:
+  employees:
+    type: sql
+    columns:
+      - dept
+      - email
+      - phone
+    query: >
+      select
+        dept,
+        employee_email,
+        employee_phone
+      from departments
+      where employee_email is not null;
+  devices:
+    type: sql
+    columns:
+      - dept
+      - type
+      - serial
+    query: >
+      select
+        dept,
+        device_type,
+        device_serial
+      from departments
+      where device_type is not null;
+
+tasks:
+  read_departments:
+    type: reader
+    inputs: [departments]
+  write_employees:
+    type: writer
+    selector: employees
+    outputs: [log, assert_5_employees]
+  write_devices:
+    type: writer
+    selector: devices
+    outputs: [log, assert_4_devices]
+
+outputs:
+  log:
+    type: logger
+  assert_5_employees:
+    type: assert
+    columns: [dept, email, phone]
+    rows:
+      - ['sales', 'john.doe@email', '1234567890']
+      - ['sales', 'don.joe@email', '0987654321']
+      - ['finance', 'ann.mary.jane@email', '1234567890']
+      - ['finance', 'mary.jane.ann@email', '2345678901']
+      - ['finance', 'jane.ann.mary@email', '3456789012']
+  assert_4_devices:
+    type: assert
+    columns: [dept, type, serial]
+    rows:
+      - ['sales', 'Phone', 'phone123']
+      - ['sales', 'Phone', 'phone321']
+      - ['finance', 'Calculator', 'calc9000']
+      - ['finance', 'Printer', 'p0001']

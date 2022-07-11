@@ -1,0 +1,7 @@
+
+[Index](../index.md) : [Components](00_overview.md) : __Batchout {{ base_cls.PLURAL_ALIAS.capitalize() }}__
+
+{% for component_type, component_cls in components_by_type.items() %}
+
+{% include 'component.md.j2' %}
+{%- endfor %}

@@ -5,9 +5,8 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="batchout",
-    version="0.1.0",
+    version="0.3.0",
     author="Ilia Khaustov",
-    author_email="ilya.khaustov@gmail.com",
     description="Framework for building data pipelines",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -17,13 +16,16 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
     ],
-    install_requires=[
-        'arrow',
-        'requests',
-        'lxml',
-        'jsonpath_rw',
-        'kafka-python',
-        'psycopg2-binary',
-    ],
-    python_requires='>=3.6',
+    entry_points={
+        "console_scripts": [
+            "batchout = batchout.cli:main",
+        ],
+    },
+    python_requires=">=3.9",
+    extras_require={
+        "xpath": ["lxml==4.8.0"],
+        "jsonpath": ["jsonpath_rw==1.4.0"],
+        "postgres": ["psycopg==3.0.14"],
+        "cli": ["pyyaml==6.0"],
+    },
 )

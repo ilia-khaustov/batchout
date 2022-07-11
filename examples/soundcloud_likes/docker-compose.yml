@@ -6,6 +6,7 @@ services:
     build:
       context: .
       dockerfile: "Dockerfile-outputs_db"
+    container_name: outputs_db
     restart: always
     environment:
       POSTGRES_USER: batchout
@@ -17,12 +18,14 @@ services:
   batchout:
     build:
       context: .
+    container_name: batchout
     depends_on:
       - outputs_db
     restart: always
     environment:
       OUTPUTS_USER: "batchout"
       OUTPUTS_PASSWORD: "batchout"
+      OUTPUTS_HOST: "outputs_db"
       PYTHONUNBUFFERED: 1
     volumes:
       - .:/opt/batchout

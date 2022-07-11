@@ -2,15 +2,23 @@
 
 Framework for building data pipelines that: 
 
-1. Extract batch of payloads with hierarchical structure like JSON or XML;
+1. Extract batch of payloads of any structure like JSON, XML or just text/bytes;
 2. Transform batch of payloads to batch of rows for a table defined by columns;
 3. Load batch of table rows to persistent storage.
 
 ## Install
 
-`pip install batchout`
+`pip install batchout` without dependencies except Python 3.9+
 
-## Usage
+`pip install batchout[cli]` with a basic CLI if you avoid coding in Python
+
+`pip install batchout[postgres]` for Postgres reading/writing
+
+`pip install batchout[jsonpath]` to extract data from JSON documents
+
+`pip install batchout[xpath]` to extract data from XML/HTML
+
+## Use in Python
 
 It is better explained by example.
 
@@ -57,7 +65,6 @@ Just use `batchout.Batch` for configuring and running your pipeline.
 ```python
 from batchout import Batch
 
-
 batch = Batch.from_config(
     dict(
         inputs=dict(
@@ -92,13 +99,26 @@ batch = Batch.from_config(
                 path='sessions[{session_idx}].id',  # notice usage of session_idx defined as index above
             ),
             session_created_at=dict(
-                type='timestamp',
+                type='datetime',
                 path='sessions[{session_idx}].created_at',
             ),
             session_useragent=dict(
-                type='timestamp',
+                type='datetime',
                 path='sessions[{session_idx}].device.useragent',
             ),
+        ),
+        maps=dict(
+            some_api=[
+                'user_id',
+                'user_last_seen',
+                dict(
+                    session_idx=[
+                        'session_id',
+                        'session_created_at',
+                        'session_useragent',
+                    ]
+                ),
+            ],
         ),
         selectors=dict(
             all_sessions=dict(
@@ -133,18 +153,6 @@ batch = Batch.from_config(
                 type='reader',
                 inputs=['some_api'],
             ),
-            walk_sessions=dict(
-                type='walker',
-                inputs=['some_api'],
-                indexes=['session_idx'],
-                columns=[
-                    'user_id',
-                    'user_last_seen',
-                    'session_id',
-                    'session_created_at',
-                    'session_useragent',
-                ],
-            ),
             write_sessions_to_local_db=dict(
                 type='writer',
                 selector='all_sessions',
@@ -164,6 +172,31 @@ batch = Batch.from_config(
 batch.run_once()
 ```
 
-`Batch.run_once()` processes exactly one batch of payloads from each input.
+## Use in terminal
 
-`Batch.run_forever()` does the same in infinite loop.
+> Requires `pip install batchout[cli]`
+
+    $ batchout --help
+    usage: batchout [-h] -c CONFIG [-n NUM_BATCHES] [-w MIN_WAIT_SEC] [-W MAX_WAIT_SEC] [-l LOG_LEVEL]
+    
+    Run Batchout from a config file (YAML)
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -c CONFIG, --config CONFIG
+                            Path to YAML config file
+      -I [IMPORT_FROM ...], --import-from [IMPORT_FROM ...]
+                            Import Python modules containing custom Batchout components
+      -n NUM_BATCHES, --num-batches NUM_BATCHES
+                            Stop after N batches (never stop if -1 or less)
+      -w MIN_WAIT_SEC, --min-wait-sec MIN_WAIT_SEC
+                            Minimum seconds to wait between batches
+      -W MAX_WAIT_SEC, --max-wait-sec MAX_WAIT_SEC
+                            Maximum seconds to wait between batches
+      -l LOG_LEVEL, --log-level LOG_LEVEL
+                            Choose logging level between 10 (DEBUG) and 50 (FATAL)
+
+
+## Read documentation
+
+First time? Proceed to [Batchout documentation](docs/index.md).

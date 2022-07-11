@@ -1,0 +1,193 @@
+{
+  "defaults": {
+    "columns": {
+      "extractor": "first_match_in_json"
+    },
+    "indexes": {
+      "extractor": "first_match_in_json"
+    }
+  },
+  "inputs": {
+    "departments": {
+      "type": "const",
+      "data": [
+        "[\n  {\n    \"department\": \"sales\",\n    \"employees\": [\n      {\n        \"email\": \"john.doe@email\",\n        \"phone\": \"1234567890\"\n      },\n      {\n        \"email\": \"don.joe@email\",\n        \"phone\": \"0987654321\"\n      }\n    ],\n    \"devices\": [\n        {\n          \"type\": \"Phone\",\n          \"serial\": \"phone123\"\n        },\n        {\n          \"type\": \"Phone\",\n          \"serial\": \"phone321\"\n        }\n    ]\n  },\n  {\n    \"department\": \"finance\",\n    \"employees\": [\n      {\n        \"email\": \"ann.mary.jane@email\",\n        \"phone\": \"1234567890\"\n      },\n      {\n        \"email\": \"mary.jane.ann@email\",\n        \"phone\": \"2345678901\"\n      },\n      {\n        \"email\": \"jane.ann.mary@email\",\n        \"phone\": \"3456789012\"\n      }\n    ],\n    \"devices\": [\n        {\n          \"type\": \"Calculator\",\n          \"serial\": \"calc9000\"\n        },\n        {\n          \"type\": \"Printer\",\n          \"serial\": \"p0001\"\n        }\n    ]\n  }\n]\n"
+      ]
+    }
+  },
+  "extractors": {
+    "first_match_in_json": {
+      "type": "jsonpath",
+      "strategy": "take_first"
+    }
+  },
+  "indexes": {
+    "dept_idx": {
+      "type": "for_list",
+      "path": "$"
+    },
+    "empl_idx": {
+      "type": "for_list",
+      "path": "$[{dept_idx}].employees"
+    },
+    "device_idx": {
+      "type": "for_list",
+      "path": "$[{dept_idx}].devices"
+    }
+  },
+  "columns": {
+    "dept": {
+      "type": "string",
+      "path": "$[{dept_idx}].department"
+    },
+    "employee_email": {
+      "type": "string",
+      "path": "$[{dept_idx}].employees[{empl_idx}].email"
+    },
+    "employee_phone": {
+      "type": "string",
+      "path": "$[{dept_idx}].employees[{empl_idx}].phone"
+    },
+    "device_type": {
+      "type": "string",
+      "path": "$[{dept_idx}].devices[{device_idx}].type"
+    },
+    "device_serial": {
+      "type": "string",
+      "path": "$[{dept_idx}].devices[{device_idx}].serial"
+    }
+  },
+  "maps": {
+    "departments": [
+      {
+        "dept_idx": [
+          "dept",
+          {
+            "empl_idx": [
+              "employee_email",
+              "employee_phone"
+            ],
+            "device_idx": [
+              "device_type",
+              "device_serial"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "selectors": {
+    "employees": {
+      "type": "sql",
+      "columns": [
+        "dept",
+        "email",
+        "phone"
+      ],
+      "query": "select\n  dept,\n  employee_email,\n  employee_phone\nfrom departments where employee_email is not null;\n"
+    },
+    "devices": {
+      "type": "sql",
+      "columns": [
+        "dept",
+        "type",
+        "serial"
+      ],
+      "query": "select\n  dept,\n  device_type,\n  device_serial\nfrom departments where device_type is not null;\n"
+    }
+  },
+  "tasks": {
+    "read_departments": {
+      "type": "reader",
+      "inputs": [
+        "departments"
+      ]
+    },
+    "write_employees": {
+      "type": "writer",
+      "selector": "employees",
+      "outputs": [
+        "log",
+        "assert_5_employees"
+      ]
+    },
+    "write_devices": {
+      "type": "writer",
+      "selector": "devices",
+      "outputs": [
+        "log",
+        "assert_4_devices"
+      ]
+    }
+  },
+  "outputs": {
+    "log": {
+      "type": "logger"
+    },
+    "assert_5_employees": {
+      "type": "assert",
+      "columns": [
+        "dept",
+        "email",
+        "phone"
+      ],
+      "rows": [
+        [
+          "sales",
+          "john.doe@email",
+          "1234567890"
+        ],
+        [
+          "sales",
+          "don.joe@email",
+          "0987654321"
+        ],
+        [
+          "finance",
+          "ann.mary.jane@email",
+          "1234567890"
+        ],
+        [
+          "finance",
+          "mary.jane.ann@email",
+          "2345678901"
+        ],
+        [
+          "finance",
+          "jane.ann.mary@email",
+          "3456789012"
+        ]
+      ]
+    },
+    "assert_4_devices": {
+      "type": "assert",
+      "columns": [
+        "dept",
+        "type",
+        "serial"
+      ],
+      "rows": [
+        [
+          "sales",
+          "Phone",
+          "phone123"
+        ],
+        [
+          "sales",
+          "Phone",
+          "phone321"
+        ],
+        [
+          "finance",
+          "Calculator",
+          "calc9000"
+        ],
+        [
+          "finance",
+          "Printer",
+          "p0001"
+        ]
+      ]
+    }
+  }
+}
